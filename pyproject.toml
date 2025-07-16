@@ -1,0 +1,16 @@
+[project]
+name = "gemmarank"
+version = "0.1.0"
+description = "Neural Reranking with T5Gemma"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pyserini>=1.1.0",
+    "ranx>=0.3.20",
+    "scikit-learn>=1.7.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["gemmarank*"]
+
