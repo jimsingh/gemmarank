@@ -72,11 +72,37 @@ dense_lr = 2e-4        # aggressive for untrained dense layer
 
 I left out many other trainig runs that were partial implementations of the above strategy! At this point, I felt I had a model that was worth considering for eval.
 
-### what's next
+## Results!
+### MS MARCO Passage Ranking (Dev Set)
 
-- finish T5-Large baseline evaluation on MS MARCO
-- implement the hybrid pairwise+listwise loss function
-- evaluation on question-answer vs exploratory queries
+Evaluation on MS MARCO passage dev/small (6,980 queries) with top-1000 BM25 candidates reranked to top-10.
+
+| Model | MRR@10 | NDCG@5 | NDCG@10 | MAP |
+|-------|--------|--------|---------|-----|
+| BM25 Baseline | 0.1840 | 0.1974 | 0.2284 | 0.1926 |
+| **This Run** | **0.3047** | **0.3269** | **0.3621** | **0.3116** |
+
+**Improvement over BM25:** +65.6% MRR@10
+
+As a point of reference, early BERT results were also in the 0.30 range. So for a first
+pass using only pairwise loss without hard negative mining, this is a respectable result.
+
+### Model Configuration
+
+- **Base Model:** T5-Large (770M parameters)
+- **Architecture:** Encoder-only with classification head
+- **Training:** 50k steps, batch size 104, pairwise BCE loss with tanh capping
+- **Input Format:** `"Query: {query} Document: {document}"`
+- **Max Length:** 128 tokens
+- **Reranking:** Top-1000 BM25 candidates → Top-10
+
+
+### What's next?
+
+- looking more closely at losses
+- hard negative mining
+- improved loss function, such as focal loss
+- listwise and pairwise samples
 - T5Gemma once I understand HOW it was trained better - it seems to have transferred weights from GemmaV2
 
 ## Methodology
