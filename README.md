@@ -24,7 +24,7 @@ One criticism of this might be that users typically only click on the top result
 
 # Current Progress
 
-## Representation Extraction 
+## Representation Extraction
 
 I evaluated three approaches for caputring the T5 encoder's representational embeddings from the hidden layer. My eval strategy was fairly rough: compare the cosine similarity of positive and negative examples using each approach. The approach that had the lowest similarity would be a good starting point because the model had already learned some differentiation.
 
@@ -58,7 +58,7 @@ The charts compare two configurations:
 - **Yellow line**: T5-Large with differential learning rates + regularization (dropout)
 
 ![Separation](assets/separation.png)
-![Training Loss](assets/train_loss.png)  
+![Training Loss](assets/train_loss.png)
 ![Validation Loss](assets/val_loss.png)
 
 Looking at the validation loss chart, you can see the non-regularized model (red) starts overfitting with validation loss climbing from ~0.47 to ~0.57. The regularized model (yellow) keeps validation loss stable around 0.44-0.45. Both models get similar separation (2.5-3.0 range) but the regularized version is more stable.
@@ -66,7 +66,7 @@ Looking at the validation loss chart, you can see the non-regularized model (red
 The differential learning rates I used:
 ```python
 embedding_lr = 5e-6    # conservative for delicate embeddings
-encoder_lr = 5e-5      # moderate for pretrained encoder  
+encoder_lr = 5e-5      # moderate for pretrained encoder
 dense_lr = 2e-4        # aggressive for untrained dense layer
 ```
 
@@ -85,17 +85,17 @@ Evaluation on MS MARCO passage dev/small (6,980 queries) with top-1000 BM25 cand
 **Improvement over BM25:** +65.6% MRR@10
 
 As a point of reference, early BERT results were also in the 0.30 range. So for a first
-pass using only pairwise loss without hard negative mining, this is a respectable result.
+pass using only pairwise loss without hard negative mining, this is a respectable result!
 
 ### Model Configuration
 
 - **Base Model:** T5-Large (770M parameters)
 - **Architecture:** Encoder-only with classification head
-- **Training:** 50k steps, batch size 104, pairwise BCE loss with tanh capping
+- **Training:** 1.1B tokens, 50k steps, batch size 104, pairwise BCE loss with tanh
 - **Input Format:** `"Query: {query} Document: {document}"`
 - **Max Length:** 128 tokens
-- **Reranking:** Top-1000 BM25 candidates → Top-10
-
+- **Reranking:** Top-1000 BM25 candidates to top-10
+- **GPU:** RTX 5090 for ~5 hours @ 50k tokens per second
 
 ### What's next?
 
