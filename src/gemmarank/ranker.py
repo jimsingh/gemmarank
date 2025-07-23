@@ -1,11 +1,16 @@
 import os
+import sys
 import joblib 
+import torch
 
 from collections import defaultdict
 from scipy.sparse import load_npz, save_npz
 from sklearn.feature_extraction.text import TfidfVectorizer
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-from gemmarank.config import ExperimentConfig
+from .rankt5_model import register_rankt5_model
+from .config import ExperimentConfig
+
 
 class TFIDFRanker:
     def __init__(self, vectorizer, corpus_matrix, corpus_ids, name: str = None):
@@ -42,7 +47,7 @@ class TFIDFRanker:
         corpus_ids = list(passages.keys())
         return cls(vectorizer, corpus_matrix, corpus_ids)
 
-    def rank_passages(self, query, passage_ids):
+    def rank_passages(self, query, passage_ids, passages_dict=None):
         qvec = self.vectorizer.transform([query])
 
         indices = [self.doc_id_to_idx[pid] for pid in passage_ids]
@@ -52,13 +57,42 @@ class TFIDFRanker:
         return {pid: scores[i] for i, pid in enumerate(passage_ids)}
 
 
-def rank_documents(ranker, queries, candidates):
+class RankT5Ranker:
+    def __init__(self, model_path, device='cuda', name="RankT5 Ranker"):
+        self.name = name
+        self.device = device
+        self.model_path = model_path
+        
+        register_rankt5_model()
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+        self.model = AutoModelForSequenceClassification.from_pretrained(model_path).to(device)
+        self.model.eval()
+
+    def rank_passages(self, query, passage_ids, passages_dict):
+        texts = [f"Query: {query}\nDocument: {passages_dict[pid]}" for pid in passage_ids]
+        
+        inputs = self.tokenizer(
+            texts, 
+            padding=True, 
+            truncation=True, 
+            max_length=128,
+            return_tensors='pt'
+        ).to(self.device)
+        
+        with torch.no_grad():
+            scores = self.model.predict(inputs.input_ids, inputs.attention_mask)
+        
+        return {pid: scores[i].item() for i, pid in enumerate(passage_ids)}
+
+
+def rank_documents(ranker, queries, candidates, passages):
     ranked = {}
-    
     items = [(qid, text) for qid, text in queries.items() if qid in candidates]
 
     for i, (qid, qtext) in enumerate(items, 1):
-        if i % 20 == 0: print(f"reranking query {i}/{len(items)}")
-        ranked[qid] = ranker.rank_passages(qtext, candidates[qid].keys())
+        if i % 100 == 0: print(f"reranking query {i}/{len(items)}")
+        
+        passage_ids = list(candidates[qid].keys())
+        ranked[qid] = ranker.rank_passages(qtext, passage_ids, passages)
     
     return ranked

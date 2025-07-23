@@ -11,11 +11,11 @@ class ExperimentConfig:
     pyserini_topic_name: str = "msmarco-passage-dev-subset"
     pyserini_index_name: str = "msmarco-v1-passage"
     bm25_k_hits: int = 1000 
-    bm25_load_top_k: int = 100
+    bm25_load_top_k: int = 1000
 
     # TF-IDF generation (fits into 16GB)
-    tfidf_max_features: int = 5000
-    tfidf_ngram_range: tuple = (1, 1)
+    tfidf_max_features: int = 10000
+    tfidf_ngram_range: tuple = (1, 2)
     tfidf_sublinear_tf: bool = True
     tfidf_max_df: float = 0.95
     tfidf_min_df: int = 5
@@ -23,4 +23,6 @@ class ExperimentConfig:
     # eval config
     evaluation_metrics: list = field(default_factory=lambda: ["mrr@10", "ndcg@5", "ndcg@10", "map"])
     
-    num_queries_to_process: int = 100 # for testing 
+    num_queries_to_process: int = 0 # for testing 
+    rankt5_model_path: str = "rankt5-t5-large-final"
+

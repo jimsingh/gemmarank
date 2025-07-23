@@ -1,7 +1,7 @@
 from ranx import Qrels
 from gemmarank.config import ExperimentConfig
 from gemmarank.retrieval import load_dataset, BM25Retriever
-from gemmarank.ranker import TFIDFRanker, rank_documents
+from gemmarank.ranker import TFIDFRanker, rank_documents, RankT5Ranker
 from gemmarank.eval import score_results
 
 
@@ -30,10 +30,16 @@ def main():
     retrieval_metrics = score_results(qrels, candidate_results, config, run_name=retriever.name)
 
     print("ranking candidates")
-    ranker = TFIDFRanker.from_corpus(passages, config)
-    ranked_results = rank_documents(ranker, queries, candidate_results) 
+    #ranker = TFIDFRanker.from_corpus(passages, config)
+    #ranked_results = rank_documents(ranker, queries, candidate_results) 
+    
+    print("ranking candidates with neural ranker")
+    from gemmarank.ranker import RankT5Ranker  # Add this import
+    ranker = RankT5Ranker(config.rankt5_model_path, name="RankT5 Neural Ranker")
+    ranked_results = rank_documents(ranker, queries, candidate_results, passages)
 
     ranked_metrics = score_results(qrels, ranked_results, config, run_name=ranker.name, save_path=config.ranker_run_path)
+
 
     print(f"\n{retrieval_metrics['run_name']}:")
     for metric, score in retrieval_metrics.items():
