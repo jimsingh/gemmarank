@@ -60,7 +60,7 @@ The charts compare two configurations:
 - **Yellow line**: T5-Large with differential learning rates + regularization (dropout)
 
 ![Separation](assets/separation.png)
-![Training Loss](assets/loss.png)  
+![Training Loss](assets/train_loss.png)  
 ![Validation Loss](assets/val_loss.png)
 
 Looking at the validation loss chart, you can see the non-regularized model (red) starts overfitting with validation loss climbing from ~0.47 to ~0.57. The regularized model (yellow) keeps validation loss stable around 0.44-0.45. Both models get similar separation (~2.5-3.0 range) but the regularized version is much more stable.
