@@ -149,7 +149,7 @@ class PairwiseDataset(IterableDataset):
         self.max_samples = max_samples
         self.is_validation = is_validation
         split = "validation" if is_validation else "train"
-        self.dataset = load_dataset("ms_marco", "v1.1", split=split, streaming=True)
+        self.dataset = load_dataset("ms_marco", "v1.1", split=split, streaming=False)
         self.seed = seed
         self.epochs = epochs
 
@@ -184,8 +184,7 @@ class PairwiseDataset(IterableDataset):
 
         for epoch in range(epochs):
             seed = self.seed if self.is_validation else self.seed + epoch
-            buffer_size = 10000 if self.is_validation else 10_000_000
-            shuffled = self.dataset.shuffle(seed=seed, buffer_size=buffer_size)
+            shuffled = self.dataset.shuffle(seed=seed)
 
             for item in shuffled:
                 for pair in self._process_item(item):
