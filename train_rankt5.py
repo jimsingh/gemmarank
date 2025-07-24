@@ -6,11 +6,11 @@ import random
 import re
 import time
 import shutil
-from datasets import load_dataset
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import wandb
+from datasets import load_dataset
 from torch.utils.data import DataLoader, IterableDataset
 from transformers import (
     AutoConfig,
@@ -19,7 +19,11 @@ from transformers import (
     T5EncoderModel,
     T5Tokenizer,
 )
+from sentence_transformers import SentenceTransformer
+
 torch.set_float32_matmul_precision('high')
+
+from gemmarank.rankt5_model import RankT5Enc, RankT5EncConfig, register_rankt5_model
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -88,59 +92,6 @@ def load_checkpoint(model, opt, path):
     opt.load_state_dict(state['optimizer_state_dict'])
     return state['step']
 
-class RankT5EncConfig(PretrainedConfig):
-    model_type = "rankt5enc"
-    def __init__(self, model_name="t5-large", **kwargs):
-        base_config = AutoConfig.from_pretrained(model_name)
-        hidden_size = base_config.d_model
-
-        super().__init__(
-            hidden_size=hidden_size,
-            model_name=model_name,
-            # different learning rates: aggressive for untrained dense layer,
-            # conservative for pretrained encoder, very conservative for delicate embeddings
-            dense_lr=2e-4,
-            embedding_lr=5e-6,
-            encoder_lr=5e-5,
-            embedding_param_names=['shared.weight'],
-            **kwargs
-        )
-
-    def get_encoder(self):
-        return T5EncoderModel.from_pretrained(self.model_name, torch_dtype=torch.bfloat16)
-
-class RankT5Enc(PreTrainedModel):
-    config_class = RankT5EncConfig
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.encoder = config.get_encoder()
-        self.dense = nn.Linear(config.hidden_size, 1)
-        nn.init.normal_(self.dense.weight, std=0.05)
-        nn.init.zeros_(self.dense.bias)
-        self.loss_fn = nn.BCEWithLogitsLoss()
-
-    def _get_normalized_scores(self, input_ids, attention_mask):
-        outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
-        hidden = outputs.last_hidden_state
-
-        # mean pooling weighted by attention mask
-        lengths = attention_mask.sum(dim=1, keepdim=True).float()
-        pooled = (hidden * attention_mask.unsqueeze(-1).float()).sum(dim=1) / lengths
-        return self.dense(pooled).squeeze(-1)
-
-    def forward(self, pos_ids=None, pos_mask=None, neg_ids=None, neg_mask=None, **kwargs):
-        pos_scores = self._get_normalized_scores(pos_ids, pos_mask)
-        neg_scores = self._get_normalized_scores(neg_ids, neg_mask)
-        score_diff = pos_scores - neg_scores
-
-        # cap reward for separating easy cases - prevents over-optimization
-        capped_diff = torch.tanh(score_diff) * 5
-
-        labels = torch.ones_like(capped_diff)
-        loss = self.loss_fn(capped_diff, labels)
-        return {"loss": loss, "score_diff": score_diff}
-
 class PairwiseDataset(IterableDataset):
     def __init__(self, tokenizer, max_len, is_validation=False, upsample=10, max_samples=None, seed=42, epochs=100):
         self.tokenizer = tokenizer
@@ -152,6 +103,8 @@ class PairwiseDataset(IterableDataset):
         self.dataset = load_dataset("ms_marco", "v1.1", split=split, streaming=False)
         self.seed = seed
         self.epochs = epochs
+        self.embedder = SentenceTransformer('all-MiniLM-L6-v2') 
+
 
     def _tokenize_pair(self, query, pos_doc, neg_doc):
         texts = [f"Query: {query}\nDocument: {pos_doc}", f"Query: {query}\nDocument: {neg_doc}"]
@@ -171,10 +124,19 @@ class PairwiseDataset(IterableDataset):
             return [self._tokenize_pair(query, pos_doc, neg_doc)
                     for pos_doc in pos_docs for neg_doc in neg_docs]
         else:
-            count = min(self.upsample, len(neg_docs))
+            # exclude 
+            query_emb = self.embedder.encode([query])
+            neg_embs = self.embedder.encode(neg_docs)
+
+            similarities = self.embedder.similarity(query_emb, neg_embs)[0]
+            filtered_negs = [neg_docs[i] for i, sim in enumerate(similarities) if sim < 0.3]
+            if len(filtered_negs) < 5: 
+                filtered_negs = neg_docs
+
+            count = min(self.upsample, len(filtered_negs))
             pairs = []
             for pos_doc in pos_docs:
-                for neg_doc in random.sample(neg_docs, count):
+                for neg_doc in random.sample(filtered_negs, count):
                     pairs.append(self._tokenize_pair(query, pos_doc, neg_doc))
             return pairs
 
@@ -279,7 +241,6 @@ def train(model, loader, val_loader, opt, init_params, args, device, start_step=
 
         if step % args.log_steps == 0:
             elapsed = time.time() - start_time
-            # estimate remaining time based on current progress rate
             remaining = (elapsed / (step - start_step)) * (args.steps - step) if step > start_step else 0
 
             log_step(step, args, loss_sum / args.log_steps, elapsed, remaining, init_params, model)
@@ -323,7 +284,7 @@ def create_optimizer(model, config):
    for name, selector, lr in specs:
        decay, no_decay_params = get_params(selector)
        if decay:
-           groups.append({"params": decay, "weight_decay": 0.01, "lr": lr, "name": f"{name}_decay"})
+           groups.append({"params": decay, "weight_decay": 0.02, "lr": lr, "name": f"{name}_decay"})
        if no_decay_params:
            groups.append({"params": no_decay_params, "weight_decay": 0.0, "lr": lr, "name": f"{name}_no_decay"})
 
@@ -333,8 +294,10 @@ def main():
     args = get_args()
     device = torch.device("cuda")
 
+    register_rankt5_model()
     if not args.wandb_run_name:
         args.wandb_run_name = f"{args.model}-bs{args.bs}-steps{args.steps}"
+
     setup_wandb(args)
 
     tokenizer = T5Tokenizer.from_pretrained(args.model)
