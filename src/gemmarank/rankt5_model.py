@@ -38,11 +38,10 @@ class RankT5Enc(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.encoder = config.get_encoder()
-        self.dropout = nn.Dropout(0.1)
+        self.dropout = nn.Dropout(0.2)
         self.dense = nn.Linear(config.hidden_size, 1)
         nn.init.normal_(self.dense.weight, std=0.05)
         nn.init.zeros_(self.dense.bias)
-        self.loss_fn = nn.BCEWithLogitsLoss()
 
     def _get_normalized_scores(self, input_ids, attention_mask):
         outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
@@ -61,7 +60,7 @@ class RankT5Enc(PreTrainedModel):
         loss = F.margin_ranking_loss(
             pos_scores, neg_scores, 
             torch.ones_like(pos_scores),
-            margin=1.0
+            margin=0.5
         )
 
         return {"loss": loss, "score_diff": score_diff}
