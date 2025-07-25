@@ -52,16 +52,18 @@ class RankT5Enc(PreTrainedModel):
         pooled = self.dropout(pooled)
         return self.dense(pooled).squeeze(-1)
 
-    def forward(self, pos_ids=None, pos_mask=None, neg_ids=None, neg_mask=None, **kwargs):
+    def forward(self, pos_ids=None, pos_mask=None, neg_ids=None, neg_mask=None, neg_sim=None, **kwargs):
         pos_scores = self._get_normalized_scores(pos_ids, pos_mask)
         neg_scores = self._get_normalized_scores(neg_ids, neg_mask)
         score_diff = pos_scores - neg_scores
 
-        loss = F.margin_ranking_loss(
-            pos_scores, neg_scores, 
-            torch.ones_like(pos_scores),
-            margin=0.5
-        )
+        if neg_sim is not None:
+            margins = 0.1 + 0.9 * torch.exp(-3.0 * neg_sim)
+        else:
+            margins = 1.0  # Default fixed margin
+        
+        losses = F.softplus(margins - score_diff)
+        loss = losses.mean()
 
         return {"loss": loss, "score_diff": score_diff}
 
@@ -72,4 +74,6 @@ class RankT5Enc(PreTrainedModel):
 def register_rankt5_model():
     AutoConfig.register("rankt5enc", RankT5EncConfig)
     AutoModelForSequenceClassification.register(RankT5EncConfig, RankT5Enc)
-    AutoTokenizer.register(RankT5EncConfig, T5Tokenizer, T5TokenizerFast)
+
+register_rankt5_model()
+

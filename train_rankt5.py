@@ -1,5 +1,6 @@
 # Standard library imports
 import argparse
+from functools import lru_cache
 import math
 import os
 import random
@@ -93,7 +94,7 @@ def load_checkpoint(model, opt, path):
     return state['step']
 
 class PairwiseDataset(IterableDataset):
-    def __init__(self, tokenizer, max_len, is_validation=False, upsample=10, max_samples=None, seed=42, epochs=100):
+    def __init__(self, tokenizer, max_len, is_validation=False, upsample=10, max_samples=None, device=None, seed=42, epochs=100):
         self.tokenizer = tokenizer
         self.max_len = max_len
         self.upsample = upsample
@@ -104,13 +105,29 @@ class PairwiseDataset(IterableDataset):
         self.seed = seed
         self.epochs = epochs
         self.embedder = SentenceTransformer('all-MiniLM-L6-v2') 
+        self.embedder.eval()
+        self.device = device
+        self.embedder = self.embedder.to(self.device)
 
+    @lru_cache(maxsize=50_000_000)
+    def _compute_similarity(self, query_doc_tuple):
+        query, doc = query_doc_tuple
+        with torch.no_grad():
+            query_emb = self.embedder.encode(query, convert_to_tensor=True, device=self.device)
+            doc_emb = self.embedder.encode(doc, convert_to_tensor=True, device=self.device)
+            return F.cosine_similarity(query_emb.unsqueeze(0), doc_emb.unsqueeze(0)).item()
+   
+    def get_similarity(self, query, doc):
+        return self._compute_similarity((query, doc))
 
     def _tokenize_pair(self, query, pos_doc, neg_doc):
         texts = [f"Query: {query}\nDocument: {pos_doc}", f"Query: {query}\nDocument: {neg_doc}"]
         tokens = self.tokenizer(texts, max_length=self.max_len, truncation=True, padding="max_length", return_tensors="pt")
+        similarity = self.get_similarity(query, neg_doc)
+
         return {"pos_ids": tokens.input_ids[0], "pos_mask": tokens.attention_mask[0],
-                "neg_ids": tokens.input_ids[1], "neg_mask": tokens.attention_mask[1]}
+                "neg_ids": tokens.input_ids[1], "neg_mask": tokens.attention_mask[1],
+                "neg_similarity": similarity}
 
     def _process_item(self, item):
         query, passages = item["query"], item["passages"]
@@ -124,12 +141,12 @@ class PairwiseDataset(IterableDataset):
             return [self._tokenize_pair(query, pos_doc, neg_doc)
                     for pos_doc in pos_docs for neg_doc in neg_docs]
         else:
-            # exclude 
             query_emb = self.embedder.encode([query])
-            neg_embs = self.embedder.encode(neg_docs)
-
+            neg_embs = self.embedder.encode(neg_docs[:100])
             similarities = self.embedder.similarity(query_emb, neg_embs)[0]
-            filtered_negs = [neg_docs[i] for i, sim in enumerate(similarities) if sim < 0.3]
+            
+            # Filter out very similar negatives (likely mislabeled)
+            filtered_negs = [neg_docs[i] for i, sim in enumerate(similarities) if sim < 0.7]
             if len(filtered_negs) < 5: 
                 filtered_negs = neg_docs
 
@@ -308,7 +325,7 @@ def main():
 
     model = torch.compile(model)
 
-    dataset = PairwiseDataset(tokenizer, max_len=128)
+    dataset = PairwiseDataset(tokenizer, max_len=128, device=device)
     loader = DataLoader(
         dataset,
         batch_size=args.bs,
@@ -334,8 +351,9 @@ def main():
 
     final_step, final_loss = train(model, loader, val_loader, opt, init_params, args, device, start_step)
 
-    final_path = f"./rankt5-{sanitize_filename(args.model)}-final"
+    final_path = f"./rankt5-{sanitize_filename(args.model)}-withsim_final"
     model.save_pretrained(final_path)
+    tokenizer.save_pretrained(final_path)
 
     if wandb.run:
         artifact = wandb.Artifact(f"rankt5-{sanitize_filename(args.model)}-final", type="model")

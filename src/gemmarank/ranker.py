@@ -6,7 +6,7 @@ import torch
 from collections import defaultdict
 from scipy.sparse import load_npz, save_npz
 from sklearn.feature_extraction.text import TfidfVectorizer
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, T5TokenizerFast
 
 from .rankt5_model import register_rankt5_model
 from .config import ExperimentConfig
@@ -63,8 +63,7 @@ class RankT5Ranker:
         self.device = device
         self.model_path = model_path
         
-        register_rankt5_model()
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+        self.tokenizer = T5TokenizerFast.from_pretrained("t5-large")
         self.model = AutoModelForSequenceClassification.from_pretrained(model_path).to(device)
         self.model.eval()
 
