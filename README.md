@@ -77,15 +77,18 @@ I left out many other trainig runs that were partial implementations of the abov
 
 Evaluation on MS MARCO passage dev/small (6,980 queries) with top-1000 BM25 candidates reranked to top-10.
 
-| Model | MRR@10 | NDCG@5 | NDCG@10 | MAP |
-|-------|--------|--------|---------|-----|
-| BM25 Baseline | 0.1840 | 0.1974 | 0.2284 | 0.1926 |
-| **This Run** | **0.3047** | **0.3269** | **0.3621** | **0.3116** |
+| Approach             | MRR@10 | NDCG@5 | NDCG@10 | MAP    |
+|----------------------|--------|--------|---------|--------|
+| BM25 (Baseline)      | 0.1840 | 0.1974 | 0.2284  | 0.1926 |
+| T5 w/ softplus       | 0.3047 | 0.3269 | 0.3621  | 0.3116 |
+| + Margin             | 0.3167 | 0.3404 | 0.3746  | 0.3234 |
+| Dynamic Margin (WIP) |        |        |         |        |
+| Curriculum Learning  |        |        |         |        |
+| Listwise Loss        |        |        |         |        |
 
-**Improvement over BM25:** +65.6% MRR@10
+**Improvement over BM25:** +72.1% MRR@10
 
-As a point of reference, early BERT results were also in the 0.30 range. So for a first
-pass using only pairwise loss without hard negative mining, this is a respectable result!
+As a point of reference, early MonoBERT results were in the 0.30 MRR@10 range and today's SOA is mid-40s.
 
 ### Model Configuration
 
