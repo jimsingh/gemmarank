@@ -77,16 +77,15 @@ I left out many other trainig runs that were partial implementations of the abov
 
 Evaluation on MS MARCO passage dev/small (6,980 queries) with top-1000 BM25 candidates reranked to top-10.
 
-| Approach             | MRR@10 | NDCG@5 | NDCG@10 | MAP    |
-|----------------------|--------|--------|---------|--------|
-| BM25 (Baseline)      | 0.1840 | 0.1974 | 0.2284  | 0.1926 |
-| T5 w/ softplus       | 0.3047 | 0.3269 | 0.3621  | 0.3116 |
-| + Margin             | 0.3167 | 0.3404 | 0.3746  | 0.3234 |
-| Dynamic Margin (WIP) |        |        |         |        |
-| Curriculum Learning  |        |        |         |        |
-| Listwise Loss        |        |        |         |        |
+| Approach             | MRR@10 | NDCG@5 | NDCG@10 | MAP    | Notes |
+|----------------------|--------|--------|---------|--------|-------|
+| BM25 (Baseline)      | 0.1840 | 0.1974 | 0.2284  | 0.1926 |       |
+| T5 w/ softplus       | 0.3047 | 0.3269 | 0.3621  | 0.3116 |       |
+| + Margin             | 0.3167 | 0.3404 | 0.3746  | 0.3234 |       |
+| Curriculum Learning  | 0.3696 | 0.3961 | 0.4349  | 0.372  | BM25, BM25 Hard, Bi-Encoder Hard (lr_d=2e-4, lr_en=5-e5, bs=104, steps=50_000 |
+| Listwise Loss        |        |        |         |        |       |
 
-**Improvement over BM25:** +72.1% MRR@10
+**Improvement over BM25:** +100.9% MRR@10
 
 As a point of reference, early MonoBERT results were in the 0.30 MRR@10 range and today's SOA is mid-40s.
 
