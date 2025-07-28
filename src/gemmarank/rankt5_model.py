@@ -13,9 +13,9 @@ class RankT5EncConfig(PretrainedConfig):
         hidden_size = base_config.d_model
 
         # Remove conflicting keys from kwargs
-        dense_lr = kwargs.pop('dense_lr', 2e-4)
+        dense_lr = kwargs.pop('dense_lr', 1e-4)
         embedding_lr = kwargs.pop('embedding_lr', 5e-6)
-        encoder_lr = kwargs.pop('encoder_lr', 5e-5)
+        encoder_lr = kwargs.pop('encoder_lr', 1e-4)
         embedding_param_names = kwargs.pop('embedding_param_names', ['shared.weight'])
 
         super().__init__(**kwargs)
@@ -38,7 +38,7 @@ class RankT5Enc(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.encoder = config.get_encoder()
-        self.dropout = nn.Dropout(0.2)
+        self.dropout = nn.Dropout(0.4)
         self.dense = nn.Linear(config.hidden_size, 1)
         nn.init.normal_(self.dense.weight, std=0.05)
         nn.init.zeros_(self.dense.bias)
@@ -50,22 +50,26 @@ class RankT5Enc(PreTrainedModel):
         lengths = attention_mask.sum(dim=1, keepdim=True).float()
         pooled = (hidden * attention_mask.unsqueeze(-1).float()).sum(dim=1) / lengths
         pooled = self.dropout(pooled)
-        return self.dense(pooled).squeeze(-1)
+        scores = self.dense(pooled).squeeze(-1)
+        return scores.clamp(-3.0, 3.0) 
 
-    def forward(self, pos_ids=None, pos_mask=None, neg_ids=None, neg_mask=None, neg_sim=None, **kwargs):
+
+    def forward(self, pos_ids=None, pos_mask=None, neg_ids=None, neg_mask=None, **kwargs):
         pos_scores = self._get_normalized_scores(pos_ids, pos_mask)
         neg_scores = self._get_normalized_scores(neg_ids, neg_mask)
         score_diff = pos_scores - neg_scores
 
-        if neg_sim is not None:
-            margins = 0.1 + 0.9 * torch.exp(-3.0 * neg_sim)
-        else:
-            margins = 1.0  # Default fixed margin
-        
-        losses = F.softplus(margins - score_diff)
-        loss = losses.mean()
+        #losses = F.softplus(neg_scores - pos_scores)
+        #loss = losses.mean()
+        loss = F.margin_ranking_loss(
+                pos_scores, neg_scores,
+                torch.ones_like(pos_scores),
+                1.0)
 
-        return {"loss": loss, "score_diff": score_diff}
+        return {
+            "loss": loss,
+            "score_diff": score_diff,
+        }
 
     def predict(self, input_ids, attention_mask):
         return self._get_normalized_scores(input_ids, attention_mask)

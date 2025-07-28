@@ -24,5 +24,5 @@ class ExperimentConfig:
     evaluation_metrics: list = field(default_factory=lambda: ["mrr@10", "ndcg@5", "ndcg@10", "map"])
     
     num_queries_to_process: int = 0 # for testing 
-    rankt5_model_path: str = "rankt5-t5-large-final"
+    rankt5_model_path: str = "rankt5-t5-large-triplet-final"
 
