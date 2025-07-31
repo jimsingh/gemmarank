@@ -60,7 +60,7 @@ class RankT5Enc(PreTrainedModel):
         attention_mask = attention_mask.view(B * K, L)
 
         scores = self._get_normalized_scores(input_ids, attention_mask)
-        scores = scores.view(B, K).continugous() # online softmax requires reduction along a contiguous dimension
+        scores = scores.view(B, K) # non-contiguous memory ... causes a softmax optimization warning
 
         labels_sum = labels.sum(dim=-1, keepdim=True)
         labels_prob = labels / labels_sum
