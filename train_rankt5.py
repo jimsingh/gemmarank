@@ -169,11 +169,19 @@ def train(model, loader, val_loader, opt, init_params, args, device, tokenizer, 
     start_time = time.time()
 
     for batch in loader:
-        
+              
         batch = {k: v.to(device) for k, v in batch.items()}
+        B = batch['pos_ids'].shape[0]
+        K = 2
+
+        input_ids = torch.stack([batch['pos_ids'], batch['neg_ids']], dim=1)
+        attention_masks = torch.stack([batch['pos_mask'], batch['neg_mask']], dim=1)
+        labels = torch.tensor([[1.0, 0.0]] * B, device=device) 
+        result_count = torch.tensor([K] * B, device=device)
 
         with torch.amp.autocast('cuda', dtype=torch.bfloat16):
-            outputs = model(**batch)
+            #outputs = model(**batch)
+            outputs = model(input_ids, attention_masks, labels, result_count)
             loss = outputs["loss"]
 
         loss.backward()

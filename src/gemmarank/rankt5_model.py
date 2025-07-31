@@ -47,14 +47,30 @@ class RankT5Enc(PreTrainedModel):
         outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
         hidden = outputs.last_hidden_state
 
-        lengths = attention_mask.sum(dim=1, keepdim=True).float()
-        pooled = (hidden * attention_mask.unsqueeze(-1).float()).sum(dim=1) / lengths
+        token_counts = attention_mask.sum(dim=-1, keepdim=True).float()
+        pooled = (hidden * attention_mask.unsqueeze(-1).float()).sum(dim=1) / token_counts 
         pooled = self.dropout(pooled)
-        scores = self.dense(pooled).squeeze(-1)
-        return scores.clamp(-3.0, 3.0) 
+        scores = self.dense(pooled)
+        return scores.clamp(-3.0, 3.0)
 
+    def forward(self, input_ids, attention_mask, labels, result_count):
+        # this just reshapes to match encoder expecations
+        B, K, L = input_ids.shape
+        input_ids = input_ids.view(B * K, L)
+        attention_mask = attention_mask.view(B * K, L)
 
-    def forward(self, pos_ids=None, pos_mask=None, neg_ids=None, neg_mask=None, **kwargs):
+        scores = self._get_normalized_scores(input_ids, attention_mask)
+        scores = scores.view(B, K).continugous() # online softmax requires reduction along a contiguous dimension
+
+        labels_sum = labels.sum(dim=-1, keepdim=True)
+        labels_prob = labels / labels_sum
+
+        log_prob = torch.log_softmax(scores, dim=-1)
+        loss = -(labels_prob * log_prob).sum(dim=-1).mean()
+
+        return {'loss': loss}
+
+    def _forward(self, pos_ids=None, pos_mask=None, neg_ids=None, neg_mask=None, **kwargs):
         pos_scores = self._get_normalized_scores(pos_ids, pos_mask)
         neg_scores = self._get_normalized_scores(neg_ids, neg_mask)
         score_diff = pos_scores - neg_scores
