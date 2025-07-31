@@ -8,9 +8,39 @@ dependencies = [
     "pyserini>=1.1.0",
     "ranx>=0.3.20",
     "scikit-learn>=1.7.0",
+    # CUDA-enabled deps (latest stable; pin if you need a specific release)
+    "torch",
+    "torchvision",
+    "torchaudio",
+    "wandb>=0.21.0",
+    "datasets>=4.0.0",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["gemmarank*"]
+
+# tell uv (and plain pip) to fetch the three packages from the CUDA 12.8 index
+[tool.uv.sources]
+torch       = { index = "pytorch" }
+torchvision = { index = "pytorch" }
+torchaudio  = { index = "pytorch" }
+
+[[tool.uv.index]]
+name = "pypi"
+url  = "https://pypi.org/simple"
+
+[[tool.uv.index]]
+name    = "pytorch"
+url     = "https://download.pytorch.org/whl/cu128"
+default = false          # fall back to pypi unless a package is mapped above
+
+[tool.uv.pip]
+extra-index-url = [ "https://download.pytorch.org/whl/cu128" ]
+
+[dependency-groups]
+dev = [
+    "poethepoet>=0.35.0",
+    "pytest>=8.4.0",
+]
 

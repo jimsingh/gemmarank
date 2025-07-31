@@ -1,8 +1,8 @@
 import argparse
 import functools
 from datetime import timedelta
-from itertools import cycle, islice
 
+import itertools
 import math
 import os
 import random
@@ -280,10 +280,10 @@ def create_data_loaders(tokenizer, args):
     steps_stage1 = int(0.20 * args.steps)
     steps_stage2 = int(0.40 * args.steps)
 
-    curriculum_loader = chain(
-        islice(itertools.cycle(loader_stage1), steps_stage1),
-        islice(itertools.cycle(loader_stage2), steps_stage2),
-        cycle(loader_stage3)
+    curriculum_loader = itertools.chain(
+        itertools.islice(itertools.cycle(loader_stage1), steps_stage1),
+        itertools.islice(itertools.cycle(loader_stage2), steps_stage2),
+        itertools.cycle(loader_stage3)
     )
 
     return curriculum_loader, val_loader
