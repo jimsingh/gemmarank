@@ -108,17 +108,23 @@ def validate_model(model, val_loader, device, args, tokenizer):
         for batch in val_loader:
             batch = {k: v.to(device) for k, v in batch.items()}
 
+            B = batch['pos_ids'].shape[0]
+            K = 2
+
+            input_ids = torch.stack([batch['pos_ids'], batch['neg_ids']], dim=1)
+            attention_masks = torch.stack([batch['pos_mask'], batch['neg_mask']], dim=1)
+            labels = torch.tensor([[1.0, 0.0]] * B, device=device)
+            result_count = torch.tensor([K] * B, device=device)
+
             with torch.amp.autocast('cuda', dtype=torch.bfloat16):
-                outputs = model(**batch)
+                outputs = model(input_ids, attention_masks, labels, result_count)
                 loss = outputs["loss"]
-                sep = outputs["score_diff"].mean()
 
             total_loss += loss.item()
-            total_sep += sep
             num_batches += 1
  
     model.train()
-    return total_loss / num_batches, total_sep / num_batches
+    return total_loss / num_batches
 
 def log_parameter_drift(model, log_dict, initial_params):
    groups = {"embedding": 0, "encoder": 0}
@@ -212,9 +218,9 @@ def train(model, loader, val_loader, opt, init_params, args, device, tokenizer, 
             loss_sum = 0
 
         if step % args.save_steps == 0:
-            val_loss, sep = validate_model(model, val_loader, device, args, tokenizer)
+            val_loss = validate_model(model, val_loader, device, args, tokenizer)
             if wandb.run:
-                wandb.log({"val_loss": val_loss, "step": step, "separation": sep})
+                wandb.log({"val_loss": val_loss, "step": step})
             #save_checkpoint(model, opt, step)
 
         if step >= args.steps:
